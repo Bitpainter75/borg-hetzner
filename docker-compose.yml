@@ -1,0 +1,77 @@
+services:
+  borg-hetzner:
+    build: .
+    container_name: borg-hetzner
+    restart: unless-stopped
+
+    # ── Volumes ──────────────────────────────────────────────────────────────
+    volumes:
+      # Quell-Volumes (read-only)
+      - /volume2:/backup/src/volume2:ro
+      - /volume3:/backup/src/volume3:ro
+
+      # SSH-Key & exclude.lst
+      - /volume2/docker/borg-hetzner/config:/backup/config:ro
+
+      # Borg-Cache (kann mehrere GB groß werden)
+      - /volume2/docker/borg-hetzner/cache:/backup/cache
+
+      # Log-Dateien
+      - /volume2/docker/borg-hetzner/logs:/backup/logs
+
+    environment:
+      # ── Zeitzone & Scheduling ─────────────────────────────────────────────
+      TZ: "Europe/Berlin"
+      # Format: "Minute Stunde Tag Monat Wochentag"
+      # Beispiele:
+      #   "0 2 * * *"    → täglich 02:00 Uhr
+      #   "30 1 * * 0"   → jeden Sonntag 01:30 Uhr
+      #   "0 1 * * 1-5"  → Mo–Fr 01:00 Uhr
+      #   "0 3 * * 1,4"  → Mo & Do 03:00 Uhr
+      CRON_SCHEDULE: "0 3 * * *"
+
+      # ── SSH / Verbindung ───────────────────────────────────────────────────
+      SSH_USER: "u123456"
+      SSH_HOST: "u123456.your-storagebox.de"
+      SSH_PORT: "23"
+      BORG_PASSPHRASE: "xxx"
+
+      # ── Remote-Pfad auf der Storagebox ────────────────────────────────────
+      # Unterordner auf der Storagebox – nützlich wenn mehrere NAS-Systeme
+      # auf dieselbe Storagebox sichern (z.B. "Server01" / "Server02")
+      # Leer lassen oder weglassen = Repos liegen direkt im Root
+      BORG_REPO_BASE: "Server01"
+
+      # ── Archiv-Einstellungen ──────────────────────────────────────────────
+      ARCHIVE_PREFIX: "Server01"
+      BORG_COMPRESSION: "zlib"     # none | lz4 | zstd | zlib | lzma
+
+      # ── Ordner-Modus ──────────────────────────────────────────────────────
+      # whitelist  → nur genannte Ordner sichern
+      # blacklist  → alle sichern außer genannten
+      # all        → alle Unterordner unter /backup/src/volume*/
+      FOLDER_MODE: "whitelist"
+      FOLDER_WHITELIST: "Foto,Software,Musik"
+      FOLDER_BLACKLIST: "Video"
+
+      # ── Prune / Aufbewahrung ──────────────────────────────────────────────
+      PRUNE_WITHIN: "5d"
+      PRUNE_DAILY: "7"
+      PRUNE_WEEKLY: "4"
+      PRUNE_MONTHLY: "6"
+
+      # ── Log-Rotation ──────────────────────────────────────────────────────
+      LOG_KEEP: "30"
+
+      # ── E-Mail Benachrichtigung ────────────────────────────────────────────
+      MAIL_ENABLED: "true"
+      MAIL_TO: "mail@domain.com"
+      MAIL_FROM: "mail@domain.com"
+      MAIL_SUBJECT_PREFIX: "[Borg Backup]"
+      MAIL_ON_SUCCESS: "true"     # true = auch bei Erfolg mailen
+
+      SMTP_HOST: "smtp.domain.com"
+      SMTP_PORT: "587"
+      SMTP_USER: "mail@domain.com"
+      SMTP_PASSWORD: "xxx"
+      SMTP_TLS: "true"             # true=STARTTLS (587) | ssl=SSL (465) | false=kein TLS

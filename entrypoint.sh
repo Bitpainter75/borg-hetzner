@@ -1,0 +1,23 @@
+#!/bin/bash
+# ═══════════════════════════════════════════════════════════════════════════════
+# Entrypoint – richtet Cron ein und startet crond
+# ═══════════════════════════════════════════════════════════════════════════════
+ENV_FILE=/etc/backup.env
+printenv | grep -v "^HOSTNAME=\|^PWD=\|^HOME=\|^SHLVL=\|^_=" > "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+rm -rf /tmp/borg-backup.lock
+echo "[entrypoint] Lockfile bereinigt"
+
+CRON_SCHEDULE="${CRON_SCHEDULE:-0 2 * * *}"
+echo "[entrypoint] Zeitzone:      ${TZ:-UTC}"
+echo "[entrypoint] Cron-Schedule: $CRON_SCHEDULE"
+
+cat > /etc/crontabs/root << CRONTAB
+$CRON_SCHEDULE bash -c 'set -a; source /etc/backup.env; set +a; exec /usr/local/bin/backup.sh' >> /proc/1/fd/1 2>&1
+CRONTAB
+
+echo "[entrypoint] Crontab:"
+cat /etc/crontabs/root
+echo "[entrypoint] Starte crond..."
+exec crond -f -l 2
