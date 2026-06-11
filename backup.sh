@@ -83,21 +83,36 @@ send_mail() {
     log "WARNUNG: MAIL_ENABLED=true, aber MAIL_TO oder SMTP_HOST fehlt"
     return 1
   }
-  local tls_flag="" auth_flag=""
-  [[ "$SMTP_TLS" == "true" ]] && tls_flag="-S smtp-use-starttls -S ssl-verify=ignore"
-  [[ "$SMTP_TLS" == "ssl"  ]] && tls_flag="-S ssl-verify=ignore"
-  [[ -n "$SMTP_USER" && -n "$SMTP_PASSWORD" ]] && \
-    auth_flag="-S smtp-auth=login -S smtp-auth-user=$SMTP_USER -S smtp-auth-password=$SMTP_PASSWORD"
+  local tls_conf="tls off"
+  local starttls_conf="tls_starttls off"
+  if [[ "$SMTP_TLS" == "true" ]]; then
+    tls_conf="tls on"; starttls_conf="tls_starttls on"
+  elif [[ "$SMTP_TLS" == "ssl" ]]; then
+    tls_conf="tls on"; starttls_conf="tls_starttls off"
+  fi
 
-  # shellcheck disable=SC2086
-  printf '%s' "$body" | s-nail \
-    -s "$MAIL_SUBJECT_PREFIX $subject" \
-    -r "$MAIL_FROM" \
-    -S smtp="smtp://$SMTP_HOST:$SMTP_PORT" \
-    $tls_flag $auth_flag \
-    "$MAIL_TO" 2>&1 | log_borg
+  local msmtp_conf
+  msmtp_conf=$(mktemp)
+  cat > "$msmtp_conf" <<EOF
+account default
+host $SMTP_HOST
+port $SMTP_PORT
+from $MAIL_FROM
+$tls_conf
+$starttls_conf
+tls_certcheck off
+auth on
+user $SMTP_USER
+password $SMTP_PASSWORD
+EOF
 
-  [[ ${PIPESTATUS[0]} -eq 0 ]] \
+  printf 'To: %s\nSubject: %s %s\nFrom: %s\n\n%s' \
+    "$MAIL_TO" "$MAIL_SUBJECT_PREFIX" "$subject" "$MAIL_FROM" "$body" \
+    | msmtp --file="$msmtp_conf" "$MAIL_TO" 2>&1 | log_borg
+  local _rc=${PIPESTATUS[0]}
+  rm -f "$msmtp_conf"
+
+  [[ $_rc -eq 0 ]] \
     && log "→ E-Mail versandt an $MAIL_TO" \
     || log "WARNUNG: E-Mail konnte nicht versandt werden"
 }
