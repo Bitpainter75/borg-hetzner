@@ -90,7 +90,7 @@ send_mail() {
     auth_flag="-S smtp-auth=login -S smtp-auth-user=$SMTP_USER -S smtp-auth-password=$SMTP_PASSWORD"
 
   # shellcheck disable=SC2086
-  printf '%s' "$body" | mailx \
+  printf '%s' "$body" | s-nail \
     -s "$MAIL_SUBJECT_PREFIX $subject" \
     -r "$MAIL_FROM" \
     -S smtp="smtp://$SMTP_HOST:$SMTP_PORT" \

@@ -6,10 +6,7 @@ RUN apk add --no-cache \
     bash \
     coreutils \
     tzdata \
-    s-nail \
- && ln -sf /usr/bin/s-nail /usr/bin/mailx
-
-# s-nail = mailx mit SMTP-Unterstützung (inkl. STARTTLS/SSL, Auth)
+    s-nail
 
 COPY backup.sh     /usr/local/bin/backup.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
