@@ -259,6 +259,7 @@ for f in "${BACKUP_FOLDERS[@]}"; do log "  • $f"; done
 # ── Sicherungsschleife ────────────────────────────────────────────────────────
 OVERALL_START=$(date +%s)
 FAILED_FOLDERS=()
+STATS_SUMMARY=""
 
 for FOLDER in "${BACKUP_FOLDERS[@]}"; do
   log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -308,6 +309,23 @@ for FOLDER in "${BACKUP_FOLDERS[@]}"; do
     log "→ [1/4] borg create FEHLGESCHLAGEN (rc=$BORG_RC) – überspringe prune/compact"
     FAILED_FOLDERS+=("$FOLDER (create rc=$BORG_RC)")
     continue
+  fi
+
+  # ── Statistiken des erstellten Archives erfassen ─────────────────────────────
+  ARCHIVE_INFO=$(borg info "$BORG_TARGET::${ARCHIVE_PREFIX}_$DATE_RESULT" 2>/dev/null)
+  if [[ -n "$ARCHIVE_INFO" ]]; then
+    STAT_FILES=$(echo "$ARCHIVE_INFO" | grep "Number of files:" | awk '{print $NF}')
+    STAT_ORIG=$(echo  "$ARCHIVE_INFO" | grep "This archive:"    | awk '{print $3, $4}')
+    STAT_COMP=$(echo  "$ARCHIVE_INFO" | grep "This archive:"    | awk '{print $5, $6}')
+    STAT_DEDUP=$(echo "$ARCHIVE_INFO" | grep "This archive:"    | awk '{print $7, $8}')
+    STAT_DUR=$(echo   "$ARCHIVE_INFO" | grep "^Duration:"       | sed 's/Duration: //')
+    STATS_SUMMARY+="  $(basename "$FOLDER"):
+    Dateien:       ${STAT_FILES:-–}
+    Original:      ${STAT_ORIG:-–}
+    Komprimiert:   ${STAT_COMP:-–}
+    Dedupliziert:  ${STAT_DEDUP:-–}
+    Dauer:         ${STAT_DUR:-–}
+"
   fi
 
   # ── [2/4] borg prune ────────────────────────────────────────────────────────
@@ -366,6 +384,10 @@ if [[ ${#FAILED_FOLDERS[@]} -gt 0 ]]; then
     log "  ✗ $f"
     FAIL_LIST+="  - $f"$'\n'
   done
+  STATS_SECTION=""
+  [[ -n "$STATS_SUMMARY" ]] && STATS_SECTION="
+Statistiken erfolgreich gesicherter Ordner:
+$STATS_SUMMARY"
   send_mail "FEHLER auf $(hostname)" \
 "Borg Backup FEHLGESCHLAGEN
 Datum:       $(date '+%Y-%m-%d %H:%M:%S')
@@ -373,7 +395,7 @@ Gesamtdauer: $DURATION_FMT
 Server:      $SSH_USER@$SSH_HOST
 
 Fehlgeschlagene Ordner:
-$FAIL_LIST
+$FAIL_LIST$STATS_SECTION
 -- Letzte 50 Log-Zeilen --
 $(tail -50 "$LOG_FILE")"
   exit 1
@@ -389,7 +411,9 @@ Gesamtdauer: $DURATION_FMT
 Server:      $SSH_USER@$SSH_HOST
 
 Gesicherte Ordner:
-$FOLDER_LIST"
+$FOLDER_LIST
+Statistiken:
+$STATS_SUMMARY"
   fi
   exit 0
 fi
