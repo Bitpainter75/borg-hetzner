@@ -3,7 +3,11 @@
 # Entrypoint – richtet Cron ein und startet crond
 # ═══════════════════════════════════════════════════════════════════════════════
 ENV_FILE=/etc/backup.env
-printenv | grep -v "^HOSTNAME=\|^PWD=\|^HOME=\|^SHLVL=\|^_=" > "$ENV_FILE"
+while IFS= read -r line; do
+  key="${line%%=*}"
+  value="${line#*=}"
+  printf '%s=%q\n' "$key" "$value"
+done < <(printenv | grep -v "^HOSTNAME=\|^PWD=\|^HOME=\|^SHLVL=\|^_=") > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 rm -rf /tmp/borg-backup.lock

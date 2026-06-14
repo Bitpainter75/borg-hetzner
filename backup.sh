@@ -207,31 +207,22 @@ _cleanup_locks() {
 }
 
 # ── Lockfile – verhindert parallele Backup-Läufe ─────────────────────────────
+# flock hält den Lock bis der Prozess endet – auch bei SIGKILL kein Stale Lock
 LOCK_FILE="/tmp/borg-backup.lock"
-
-if ! mkdir "$LOCK_FILE" 2>/dev/null; then
-  LOCK_PID=$(cat "$LOCK_FILE/pid" 2>/dev/null)
-  if [[ -n "$LOCK_PID" ]] && kill -0 "$LOCK_PID" 2>/dev/null; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] SKIP: Backup läuft bereits (PID $LOCK_PID) – dieser Lauf wird übersprungen"
-    exit 0
-  else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNUNG: Veraltetes Lockfile gefunden (PID $LOCK_PID) – wird entfernt"
-    rm -rf "$LOCK_FILE"
-    mkdir "$LOCK_FILE"
-  fi
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] SKIP: Backup läuft bereits – dieser Lauf wird übersprungen"
+  exit 0
 fi
-
-echo $$ > "$LOCK_FILE/pid"
 
 # ── Trap ──────────────────────────────────────────────────────────────────────
 cleanup() {
   local exit_code=$?
-  rm -rf "$LOCK_FILE"
   [[ $exit_code -ne 0 ]] && log "===== SKRIPT UNERWARTET BEENDET (Exit-Code: $exit_code) ====="
 }
 trap cleanup EXIT
-trap 'log "Signal SIGINT empfangen – räume auf...";  rm -rf "$LOCK_FILE"; exit 130' INT
-trap 'log "Signal SIGTERM empfangen – räume auf..."; rm -rf "$LOCK_FILE"; exit 143' TERM
+trap 'log "Signal SIGINT empfangen – räume auf...";  exit 130' INT
+trap 'log "Signal SIGTERM empfangen – räume auf..."; exit 143' TERM
 
 # ── Start ─────────────────────────────────────────────────────────────────────
 log "===== BACKUP GESTARTET ====="
