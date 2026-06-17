@@ -23,6 +23,7 @@ BORG_PASSPHRASE="${BORG_PASSPHRASE}"
 BORG_REPO_BASE="${BORG_REPO_BASE:-}"          # z.B. "Asterix" – leer = Root
 ARCHIVE_PREFIX="${ARCHIVE_PREFIX:-backup}"
 BORG_COMPRESSION="${BORG_COMPRESSION:-zlib}"
+BORG_ENCRYPTION="${BORG_ENCRYPTION:-repokey}"
 LOG_KEEP="${LOG_KEEP:-30}"
 
 PRUNE_WITHIN="${PRUNE_WITHIN:-5d}"
@@ -191,6 +192,24 @@ borg_create_with_retry() {
   return $rc
 }
 
+# ── Repo initialisieren falls nicht vorhanden ────────────────────────────────
+_ensure_repo() {
+  local target="$1"
+  borg info "$target" > /dev/null 2>&1
+  local rc=$?
+  if [[ $rc -eq 2 ]]; then
+    log "→ Repository nicht gefunden – initialisiere mit borg init (encryption=$BORG_ENCRYPTION)"
+    borg init --encryption="$BORG_ENCRYPTION" "$target" 2>&1 | log_borg
+    rc=${PIPESTATUS[0]}
+    if [[ $rc -ne 0 ]]; then
+      log "→ borg init FEHLGESCHLAGEN (rc=$rc)"
+      return $rc
+    fi
+    log "→ borg init OK"
+  fi
+  return 0
+}
+
 # ── Locks bereinigen (lokal + remote) ────────────────────────────────────────
 # Gibt zurück ob ein Remote-Lock gebrochen wurde (0 = ja, 1 = nein)
 _cleanup_locks() {
@@ -262,6 +281,12 @@ for FOLDER in "${BACKUP_FOLDERS[@]}"; do
   BORG_TARGET="ssh://$SSH_USER@$SSH_HOST:$SSH_PORT/$REPO_PREFIX/$REPO_NAME"
   EXCLUDE_ARG=""
   [[ -f "$EXCLUDE_FILE" ]] && EXCLUDE_ARG="--exclude-from $EXCLUDE_FILE"
+
+  # ── Repo initialisieren falls nicht vorhanden ───────────────────────────────
+  if ! _ensure_repo "$BORG_TARGET"; then
+    FAILED_FOLDERS+=("$FOLDER (init fehlgeschlagen)")
+    continue
+  fi
 
   # ── Locks bereinigen ────────────────────────────────────────────────────────
   _cleanup_locks "$BORG_TARGET"
