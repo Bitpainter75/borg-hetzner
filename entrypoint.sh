@@ -23,5 +23,10 @@ CRONTAB
 
 echo "[entrypoint] Crontab:"
 cat /etc/crontabs/root
+if [ "${RUN_ON_START:-false}" = "true" ]; then
+  echo "[entrypoint] RUN_ON_START=true – starte Backup sofort..."
+  bash -c 'set -a; source /etc/backup.env; set +a; exec /usr/local/bin/backup.sh' >> /proc/1/fd/1 2>&1 &
+fi
+
 echo "[entrypoint] Starte crond..."
 exec crond -f -l 2

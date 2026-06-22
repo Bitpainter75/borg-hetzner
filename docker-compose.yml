@@ -29,6 +29,8 @@ services:
       #   "0 1 * * 1-5"  → Mo–Fr 01:00 Uhr
       #   "0 3 * * 1,4"  → Mo & Do 03:00 Uhr
       CRON_SCHEDULE: "0 3 * * *"
+      # true = Backup wird einmalig direkt beim Containerstart ausgeführt
+      RUN_ON_START: "false"
 
       # ── SSH / Verbindung ───────────────────────────────────────────────────
       SSH_USER: "u123456"
