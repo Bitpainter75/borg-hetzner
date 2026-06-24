@@ -10,7 +10,7 @@ services:
       - /volume2:/backup/src/volume2:ro
       - /volume3:/backup/src/volume3:ro
 
-      # SSH-Key & exclude.lst
+      # SSH-Key & exclude.lst (nur bei BACKUP_TARGET=ssh benötigt)
       - /volume2/docker/borg-hetzner/config:/backup/config:ro
 
       # Borg-Cache (kann mehrere GB groß werden)
@@ -19,7 +19,7 @@ services:
       # Log-Dateien
       - /volume2/docker/borg-hetzner/logs:/backup/logs
 
-      # Lokales Backup-Ziel (nur bei BACKUP_TARGET=local benötigt)
+      # Lokales Backup-Ziel (nur bei BACKUP_TARGET=local – Pfad anpassen)
       # - /pfad/zum/ziel:/backup/dest
 
     environment:
@@ -36,29 +36,26 @@ services:
       RUN_ON_START: "false"
 
       # ── Backup-Ziel ────────────────────────────────────────────────────────
-      # ssh   = Hetzner Storagebox / beliebiger SSH-Server (Standard)
-      # local = lokales Verzeichnis im Container (/backup/dest)
+      # ssh   = Hetzner Storagebox / beliebiger SSH-Server
+      # local = lokal gemountetes Verzeichnis (/backup/dest im Container)
       BACKUP_TARGET: "ssh"
 
-      # ── SSH / Verbindung (nur bei BACKUP_TARGET=ssh) ───────────────────────
+      # ── Borg ──────────────────────────────────────────────────────────────
+      BORG_PASSPHRASE: "xxx"
+      # Unterordner im Ziel-Repo (z.B. "Server01" wenn mehrere NAS sichern)
+      # Leer lassen oder weglassen = Repos liegen direkt im Root
+      BORG_REPO_BASE: "Server01"
+      ARCHIVE_PREFIX: "Server01"
+      BORG_COMPRESSION: "zlib"     # none | lz4 | zstd | zlib | lzma
+
+      # ── SSH-Verbindung (nur bei BACKUP_TARGET=ssh) ────────────────────────
       SSH_USER: "u123456"
       SSH_HOST: "u123456.your-storagebox.de"
       SSH_PORT: "23"
-      BORG_PASSPHRASE: "xxx"
 
       # ── Lokales Ziel (nur bei BACKUP_TARGET=local) ────────────────────────
-      # Pfad im Container – entspricht dem gemounteten Volume /backup/dest
+      # Pfad im Container – muss dem gemounteten Volume oben entsprechen
       # BORG_LOCAL_PATH: "/backup/dest"
-
-      # ── Remote-Pfad auf der Storagebox ────────────────────────────────────
-      # Unterordner auf der Storagebox – nützlich wenn mehrere NAS-Systeme
-      # auf dieselbe Storagebox sichern (z.B. "Server01" / "Server02")
-      # Leer lassen oder weglassen = Repos liegen direkt im Root
-      BORG_REPO_BASE: "Server01"
-
-      # ── Archiv-Einstellungen ──────────────────────────────────────────────
-      ARCHIVE_PREFIX: "Server01"
-      BORG_COMPRESSION: "zlib"     # none | lz4 | zstd | zlib | lzma
 
       # ── Ordner-Modus ──────────────────────────────────────────────────────
       # whitelist  → nur genannte Ordner sichern
