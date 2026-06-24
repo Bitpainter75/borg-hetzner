@@ -19,6 +19,9 @@ services:
       # Log-Dateien
       - /volume2/docker/borg-hetzner/logs:/backup/logs
 
+      # Lokales Backup-Ziel (nur bei BACKUP_TARGET=local benötigt)
+      # - /pfad/zum/ziel:/backup/dest
+
     environment:
       # ── Zeitzone & Scheduling ─────────────────────────────────────────────
       TZ: "Europe/Berlin"
@@ -32,11 +35,20 @@ services:
       # true = Backup wird einmalig direkt beim Containerstart ausgeführt
       RUN_ON_START: "false"
 
-      # ── SSH / Verbindung ───────────────────────────────────────────────────
+      # ── Backup-Ziel ────────────────────────────────────────────────────────
+      # ssh   = Hetzner Storagebox / beliebiger SSH-Server (Standard)
+      # local = lokales Verzeichnis im Container (/backup/dest)
+      BACKUP_TARGET: "ssh"
+
+      # ── SSH / Verbindung (nur bei BACKUP_TARGET=ssh) ───────────────────────
       SSH_USER: "u123456"
       SSH_HOST: "u123456.your-storagebox.de"
       SSH_PORT: "23"
       BORG_PASSPHRASE: "xxx"
+
+      # ── Lokales Ziel (nur bei BACKUP_TARGET=local) ────────────────────────
+      # Pfad im Container – entspricht dem gemounteten Volume /backup/dest
+      # BORG_LOCAL_PATH: "/backup/dest"
 
       # ── Remote-Pfad auf der Storagebox ────────────────────────────────────
       # Unterordner auf der Storagebox – nützlich wenn mehrere NAS-Systeme

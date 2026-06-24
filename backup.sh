@@ -4,9 +4,14 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ── Pflicht-Variablen prüfen ──────────────────────────────────────────────────
-: "${SSH_USER:?Variable SSH_USER muss gesetzt sein}"
-: "${SSH_HOST:?Variable SSH_HOST muss gesetzt sein}"
 : "${BORG_PASSPHRASE:?Variable BORG_PASSPHRASE muss gesetzt sein}"
+BACKUP_TARGET="${BACKUP_TARGET:-ssh}"   # ssh | local
+if [[ "$BACKUP_TARGET" == "ssh" ]]; then
+  : "${SSH_USER:?Variable SSH_USER muss gesetzt sein (BACKUP_TARGET=ssh)}"
+  : "${SSH_HOST:?Variable SSH_HOST muss gesetzt sein (BACKUP_TARGET=ssh)}"
+elif [[ "$BACKUP_TARGET" != "local" ]]; then
+  echo "FEHLER: BACKUP_TARGET muss 'ssh' oder 'local' sein (ist: '$BACKUP_TARGET')"; exit 1
+fi
 
 # ── Interne Pfade (hardcoded, gespiegelt von den Volume-Mounts) ───────────────
 SOURCE_ROOT="/backup/src"
@@ -19,6 +24,7 @@ EXCLUDE_FILE="$CONFIG_DIR/exclude.lst"
 
 # ── Konfiguration (via compose steuerbar) ─────────────────────────────────────
 SSH_PORT="${SSH_PORT:-23}"
+BORG_LOCAL_PATH="${BORG_LOCAL_PATH:-/backup/dest}"
 BORG_PASSPHRASE="${BORG_PASSPHRASE}"
 BORG_REPO_BASE="${BORG_REPO_BASE:-}"          # z.B. "Asterix" – leer = Root
 ARCHIVE_PREFIX="${ARCHIVE_PREFIX:-backup}"
@@ -47,19 +53,23 @@ SMTP_PASSWORD="${SMTP_PASSWORD:-}"
 SMTP_TLS="${SMTP_TLS:-true}"
 
 # ── Borg Umgebungsvariablen ───────────────────────────────────────────────────
-export BORG_RSH="ssh -i $SSH_KEY -p $SSH_PORT -4 -o StrictHostKeyChecking=no"
+if [[ "$BACKUP_TARGET" == "ssh" ]]; then
+  export BORG_RSH="ssh -i $SSH_KEY -p $SSH_PORT -4 -o StrictHostKeyChecking=no"
+fi
 export BORG_PASSPHRASE
 export BORG_CACHE_DIR="$CACHE_DIR"
 
 mkdir -p "$CACHE_DIR" "$LOG_DIR"
 
-# ── Remote-Pfad zusammenbauen ─────────────────────────────────────────────────
+# ── Repo-Pfad-Präfix (nur für SSH benötigt) ───────────────────────────────────
 # Mit Base:    ssh://user@host:port/./Asterix/Patrick
 # Ohne Base:   ssh://user@host:port/./Patrick
-if [[ -n "$BORG_REPO_BASE" ]]; then
-  REPO_PREFIX="./$BORG_REPO_BASE"
-else
-  REPO_PREFIX="."
+if [[ "$BACKUP_TARGET" == "ssh" ]]; then
+  if [[ -n "$BORG_REPO_BASE" ]]; then
+    REPO_PREFIX="./$BORG_REPO_BASE"
+  else
+    REPO_PREFIX="."
+  fi
 fi
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -248,7 +258,12 @@ log "===== BACKUP GESTARTET ====="
 log "Log-Datei:    $LOG_FILE"
 log "Source-Root:  $SOURCE_ROOT"
 log "Modus:        $FOLDER_MODE"
-log "SSH:          $SSH_USER@$SSH_HOST:$SSH_PORT"
+log "Ziel:         $BACKUP_TARGET"
+if [[ "$BACKUP_TARGET" == "ssh" ]]; then
+  log "SSH:          $SSH_USER@$SSH_HOST:$SSH_PORT"
+else
+  log "Lokal:        $BORG_LOCAL_PATH"
+fi
 log "Repo-Base:    ${BORG_REPO_BASE:-<root>}"
 log "Kompression:  $BORG_COMPRESSION"
 log "Prune:        within=$PRUNE_WITHIN  daily=$PRUNE_DAILY  weekly=$PRUNE_WEEKLY  monthly=$PRUNE_MONTHLY"
@@ -278,7 +293,16 @@ for FOLDER in "${BACKUP_FOLDERS[@]}"; do
 
   DATE_RESULT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   REPO_NAME=$(basename "$FOLDER")
-  BORG_TARGET="ssh://$SSH_USER@$SSH_HOST:$SSH_PORT/$REPO_PREFIX/$REPO_NAME"
+  if [[ "$BACKUP_TARGET" == "ssh" ]]; then
+    BORG_TARGET="ssh://$SSH_USER@$SSH_HOST:$SSH_PORT/$REPO_PREFIX/$REPO_NAME"
+  else
+    if [[ -n "$BORG_REPO_BASE" ]]; then
+      BORG_TARGET="$BORG_LOCAL_PATH/$BORG_REPO_BASE/$REPO_NAME"
+    else
+      BORG_TARGET="$BORG_LOCAL_PATH/$REPO_NAME"
+    fi
+    mkdir -p "$(dirname "$BORG_TARGET")"
+  fi
   EXCLUDE_ARG=""
   [[ -f "$EXCLUDE_FILE" ]] && EXCLUDE_ARG="--exclude-from $EXCLUDE_FILE"
 
@@ -393,6 +417,12 @@ log "━━━━━━━━━━━━━━━━━━━━━━━━━
 log "===== BACKUP ABGESCHLOSSEN ====="
 log "Gesamtdauer: $DURATION_FMT"
 
+if [[ "$BACKUP_TARGET" == "ssh" ]]; then
+  TARGET_DISPLAY="$SSH_USER@$SSH_HOST (SSH)"
+else
+  TARGET_DISPLAY="$BORG_LOCAL_PATH (lokal)"
+fi
+
 if [[ ${#FAILED_FOLDERS[@]} -gt 0 ]]; then
   log "FEHLER bei folgenden Ordnern:"
   FAIL_LIST=""
@@ -408,7 +438,7 @@ $STATS_SUMMARY"
 "Borg Backup FEHLGESCHLAGEN
 Datum:       $(date '+%Y-%m-%d %H:%M:%S')
 Gesamtdauer: $DURATION_FMT
-Server:      $SSH_USER@$SSH_HOST
+Ziel:        $TARGET_DISPLAY
 
 Fehlgeschlagene Ordner:
 $FAIL_LIST$STATS_SECTION
@@ -424,7 +454,7 @@ else
 "Borg Backup erfolgreich
 Datum:       $(date '+%Y-%m-%d %H:%M:%S')
 Gesamtdauer: $DURATION_FMT
-Server:      $SSH_USER@$SSH_HOST
+Ziel:        $TARGET_DISPLAY
 
 Gesicherte Ordner:
 $FOLDER_LIST
